@@ -3,11 +3,11 @@
 # OCI/Docker Registry API in pure shell (curl + jq). Output: single rootfs .tar[.gz] (top-level bin, etc, usr, ...).
 #
 # Usage:
-#   hetzner-download-image.sh [OPTIONS] IMAGE [OUTPUT.tar.gz]
+#   hetzner-download-image.sh [OPTIONS] IMAGE [OUTPUT_DIR]
 #   hetzner-download-image.sh -h | --help
 #
 # Options:
-#   -o, --output FILE   Output path (default: <repo>_<tag>.tar.gz)
+#   -o, --output DIR   Output directory (default: .). Filename is always <repo>_<tag>-<arch>.tar[.gz]
 #   --no-gzip           Write uncompressed .tar
 #   -u, --user USER[:PASSWORD]   Registry credentials (required for private images)
 #   -q, --quiet         Less output
@@ -30,6 +30,7 @@ REGISTRY=""
 REPOSITORY=""
 REFERENCE=""
 IMAGE_REF=""
+OUTPUT_DIR=""
 OUTPUT_FILE=""
 DO_GZIP=1
 QUIET=0
@@ -44,7 +45,7 @@ show_help() {
   sed -n '2,18p' "$0" | sed 's/^# \?//'
   echo "Examples:"
   echo "  $ME ghcr.io/myorg/hetzner-images/debian-13:latest"
-  echo "  $ME -o /root/local_images/debian-13.tar.gz -u user:token ghcr.io/myorg/debian-13:latest"
+  echo "  $ME -o /root/local_images -u user:token ghcr.io/myorg/debian-13:latest"
   echo "Install: curl https://get.hetzner-download-image.sh | sh -s"
   exit 0
 }
@@ -157,6 +158,38 @@ get_layer_digests() { jq -r '.layers[]? | .digest' "$1"; }
 get_manifest_list_digest() { jq -r '.manifests[0].digest // empty' "$1"; }
 digest_to_name() { echo "$1" | sed 's/^sha256://'; }
 
+# Map uname -m to OCI/Docker platform.architecture (see OCI Image Index).
+get_host_arch() {
+  local m
+  m=$(uname -m 2>/dev/null) || m=""
+  case "$m" in
+    x86_64|amd64)     echo "amd64" ;;
+    aarch64|arm64)    echo "arm64" ;;
+    armv7l|armv6l)    echo "arm" ;;
+    i386|i686)        echo "386" ;;
+    ppc64le)          echo "ppc64le" ;;
+    s390x)            echo "s390x" ;;
+    riscv64)          echo "riscv64" ;;
+    *)                echo "${m:-unknown}" ;;
+  esac
+}
+
+# From a manifest list (index), output the digest for the first manifest matching
+# the given OCI architecture and os=linux, or the first manifest if none match.
+get_manifest_digest_for_platform() {
+  local list_file="$1" want_arch="$2"
+  local digest
+  [ -n "$want_arch" ] || want_arch=$(get_host_arch)
+  digest=$(jq -r --arg arch "$want_arch" '
+    .manifests[]? | select(
+      ((.platform.architecture // "amd64") == $arch) and
+      ((.platform.os // "linux") == "linux")
+    ) | .digest
+  ' "$list_file" 2>/dev/null | head -1)
+  [ -n "$digest" ] || digest=$(get_manifest_list_digest "$list_file")
+  echo "$digest"
+}
+
 # Extract layer (plain tar or gzip) into rootfs dir.
 # Exclude ./dev/* so we never mknod (requires root); target system creates /dev at boot.
 extract_layer_to_rootfs() {
@@ -166,9 +199,10 @@ extract_layer_to_rootfs() {
 
 # --- Default output ---
 default_output() {
-  local base
+  local base arch
+  arch=$(get_host_arch)
   base=$(echo "${REPOSITORY}/${REFERENCE}" | tr '/:' '__')
-  echo "${base}.tar"
+  echo "${base}-${arch}.tar"
 }
 
 # ========== DOWNLOAD (rootfs only) ==========
@@ -207,10 +241,11 @@ cmd_download() {
   fi
 
   if jq -e '.manifests != null' "$manifest_file" >/dev/null 2>&1; then
-    local list_digest
-    list_digest=$(get_manifest_list_digest "$manifest_file")
+    local list_digest host_arch
+    host_arch=$(get_host_arch)
+    list_digest=$(get_manifest_digest_for_platform "$manifest_file" "$host_arch")
     [ -n "$list_digest" ] || { log_err "could not get digest from manifest list"; exit 1; }
-    log "Resolving multi-arch image to digest ${list_digest}..."
+    log "Resolving multi-arch image for ${host_arch} to digest ${list_digest}..."
     registry_get "manifests/${list_digest}" \
       -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
       -H 'Accept: application/vnd.oci.image.manifest.v1+json' > "$manifest_file" || true
@@ -280,7 +315,10 @@ while [ $# -gt 0 ]; do
       show_help
       ;;
     -o|--output)
-      OUTPUT_FILE="$2"
+      OUTPUT_DIR="$2"
+      case "$OUTPUT_DIR" in
+        *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;;
+      esac
       shift 2
       ;;
     --no-gzip)
@@ -295,17 +333,26 @@ while [ $# -gt 0 ]; do
       if [ -z "$IMAGE_REF" ]; then
         parse_image "$1"
         shift
-        [ $# -gt 0 ] && [ "${1#-}" = "$1" ] && OUTPUT_FILE="$1" && shift
+        if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+          OUTPUT_DIR="$1"
+          case "$OUTPUT_DIR" in *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;; esac
+          shift
+        fi
       else
-        [ "${1#-}" = "$1" ] && OUTPUT_FILE="$1"
+        if [ "${1#-}" = "$1" ]; then
+          OUTPUT_DIR="$1"
+          case "$OUTPUT_DIR" in *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;; esac
+        fi
         shift
       fi
       ;;
   esac
 done
 
-[ -n "$IMAGE_REF" ] || { log_err "usage: $ME [OPTIONS] IMAGE [OUTPUT]"; exit 1; }
-[ -n "$OUTPUT_FILE" ] || OUTPUT_FILE=$(default_output)
+[ -n "$IMAGE_REF" ] || { log_err "usage: $ME [OPTIONS] IMAGE [OUTPUT_DIR]"; exit 1; }
+# Output is always <dir>/<repo>_<tag>-<arch>.tar[.gz]
+OUTPUT_FILE="${OUTPUT_DIR:-.}"
+OUTPUT_FILE="${OUTPUT_FILE%/}/$(default_output)"
 if [ "$DO_GZIP" = 1 ] && [ "${OUTPUT_FILE%.gz}" = "$OUTPUT_FILE" ]; then
   [ "${OUTPUT_FILE%.tar}" = "$OUTPUT_FILE" ] && OUTPUT_FILE="${OUTPUT_FILE}.tar"
 fi

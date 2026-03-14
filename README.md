@@ -44,23 +44,23 @@ SCRIPT_URL=https://raw.githubusercontent.com/OWNER/REPO/main/hetzner-download-im
 ## Usage
 
 ```bash
-hetzner-download-image.sh [OPTIONS] IMAGE [OUTPUT]
+hetzner-download-image.sh [OPTIONS] IMAGE [OUTPUT_DIR]
 
 # Examples
 hetzner-download-image.sh ghcr.io/myorg/hetzner-images/debian-13:latest
-hetzner-download-image.sh -o /root/local_images/debian-13.tar.gz -u user:token ghcr.io/myorg/debian-13:latest
-hetzner-download-image.sh --no-gzip -o rootfs.tar docker.io/library/alpine:3.19
+hetzner-download-image.sh -o /root/local_images -u user:token ghcr.io/myorg/debian-13:latest
+hetzner-download-image.sh --no-gzip -o ./images docker.io/library/alpine:3.19
 ```
 
 | Option       | Description |
 |-------------|-------------|
-| `-o FILE`   | Output path (default: `<repo>_<tag>.tar.gz`) |
+| `-o DIR`    | Output directory (default: current dir). Filename is always `<repo>_<tag>-<arch>.tar[.gz]` |
 | `--no-gzip` | Write uncompressed `.tar` |
 | `-u USER[:PASSWORD]` | Registry credentials (required for private images) |
 | `-q`        | Quiet |
 | `-h`, `--help` | Show help |
 
-The output is a single rootfs tarball. Point installimage’s config at this file (e.g. in `config.cfg`).
+The script writes a single rootfs tarball into the output directory. The file name is derived from the image and **host architecture** (e.g. `debian-13__latest-amd64.tar.gz`). Point installimage’s config at this file (e.g. in `config.cfg`).
 
 ## Image reference
 
@@ -68,6 +68,10 @@ The output is a single rootfs tarball. Point installimage’s config at this fil
 - Default registry: Docker Hub (`registry-1.docker.io`)
 - Default tag: `latest`
 - For GitHub Container Registry use `-u USER:ghp_TOKEN` or `GITHUB_TOKEN`.
+
+## Architecture
+
+For multi-arch images (manifest lists), the script picks the manifest matching the **host** architecture (`uname -m` → OCI: amd64, arm64, arm, 386, ppc64le, s390x, riscv64). If no match is found, the first manifest in the list is used.
 
 ## License
 
