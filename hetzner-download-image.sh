@@ -202,7 +202,11 @@ default_output() {
   local base arch
   arch=$(get_host_arch)
   base=$(echo "${REPOSITORY}/${REFERENCE}" | tr '/:' '__')
-  echo "${base}-${arch}.tar"
+  if [ "$DO_GZIP" = 1 ]; then
+    echo "${base}-${arch}.tar.gz"
+  else
+    echo "${base}-${arch}.tar"
+  fi
 }
 
 # ========== DOWNLOAD (rootfs only) ==========
@@ -350,11 +354,8 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$IMAGE_REF" ] || { log_err "usage: $ME [OPTIONS] IMAGE [OUTPUT_DIR]"; exit 1; }
-# Output is always <dir>/<repo>_<tag>-<arch>.tar[.gz]
+# Output is always <dir>/<repo>_<tag>-<arch>.tar or .tar.gz
 OUTPUT_FILE="${OUTPUT_DIR:-.}"
 OUTPUT_FILE="${OUTPUT_FILE%/}/$(default_output)"
-if [ "$DO_GZIP" = 1 ] && [ "${OUTPUT_FILE%.gz}" = "$OUTPUT_FILE" ]; then
-  [ "${OUTPUT_FILE%.tar}" = "$OUTPUT_FILE" ] && OUTPUT_FILE="${OUTPUT_FILE}.tar"
-fi
 
 cmd_download

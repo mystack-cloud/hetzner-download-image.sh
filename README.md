@@ -60,7 +60,7 @@ hetzner-download-image.sh --no-gzip -o ./images docker.io/library/alpine:3.19
 | `-q`        | Quiet |
 | `-h`, `--help` | Show help |
 
-The script writes a single rootfs tarball into the output directory. The file name is derived from the image and **host architecture** (e.g. `debian-13__latest-amd64.tar.gz`). Point installimage’s config at this file (e.g. in `config.cfg`).
+The script writes a single rootfs tarball into the output directory. The file name is derived from the image and **host architecture** (e.g. `debian-13__latest-amd64.tar.gz` by default, or `debian-13__latest-amd64.tar` with `--no-gzip`). Point installimage’s config at this file (e.g. in `config.cfg`).
 
 ## Image reference
 
