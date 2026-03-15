@@ -7,7 +7,7 @@
 #   hetzner-download-image.sh -h | --help
 #
 # Options:
-#   -o, --output DIR   Output directory (default: .). Filename is <name>-<tag>-<arch>.tar[.gz] (name = last repo path component)
+#   -o, --output DIR   Output directory (default: .). Filename is <name>-<arch>-<tag>.tar[.gz]
 #   --no-gzip           Write uncompressed .tar
 #   -u, --user USER[:PASSWORD]   Registry credentials (required for private images)
 #   -q, --quiet         Less output
@@ -198,17 +198,17 @@ extract_layer_to_rootfs() {
 }
 
 # --- Default output ---
-# Filename: <last repo path component>-<tag>-<arch>.tar[.gz] (no full registry path)
+# Filename: <last repo path component>-<arch>-<tag>.tar[.gz] (arch before tag for installimage)
 default_output() {
   local repo_name ref_safe base arch
   arch=$(get_host_arch)
   repo_name="${REPOSITORY##*/}"   # e.g. debian-13 from mystack-cloud/hetzner-images/debian-13
   ref_safe=$(echo "$REFERENCE" | tr '/:' '__')
-  base="${repo_name}-${ref_safe}"
+  base="${repo_name}-${arch}-${ref_safe}"
   if [ "$DO_GZIP" = 1 ]; then
-    echo "${base}-${arch}.tar.gz"
+    echo "${base}.tar.gz"
   else
-    echo "${base}-${arch}.tar"
+    echo "${base}.tar"
   fi
 }
 
@@ -357,7 +357,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$IMAGE_REF" ] || { log_err "usage: $ME [OPTIONS] IMAGE [OUTPUT_DIR]"; exit 1; }
-# Output is always <dir>/<name>-<tag>-<arch>.tar or .tar.gz
+# Output is always <dir>/<name>-<arch>-<tag>.tar or .tar.gz
 OUTPUT_FILE="${OUTPUT_DIR:-.}"
 OUTPUT_FILE="${OUTPUT_FILE%/}/$(default_output)"
 
