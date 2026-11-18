@@ -91,9 +91,11 @@ add_to_path() {
     if grep -q "# hetzner-download-image.sh" "$_rc" 2>/dev/null; then
       return 0
     fi
-    echo "" >> "$_rc"
-    echo "# hetzner-download-image.sh" >> "$_rc"
-    echo "$_path_line" >> "$_rc"
+    {
+      echo ""
+      echo "# hetzner-download-image.sh"
+      echo "$_path_line"
+    } >> "$_rc"
     echo "Added to PATH in $_rc"
     return 0
   done

@@ -137,13 +137,12 @@ registry_get() {
   body_file="${WORKDIR}/body.$$"
 
   _do_get() {
-    local opts="--silent --show-error --location -D $headers_file -o $body_file"
     if [ -n "$REGISTRY_TOKEN_FILE" ] && [ -s "$REGISTRY_TOKEN_FILE" ]; then
       printf 'Authorization: Bearer ' > "${WORKDIR}/.auth_header"
       tr -d '\n\r' < "$REGISTRY_TOKEN_FILE" >> "${WORKDIR}/.auth_header"
-      curl $opts -H "@${WORKDIR}/.auth_header" "$@" "$url" 2>/dev/null || true
+      curl --silent --show-error --location -D "$headers_file" -o "$body_file" -H "@${WORKDIR}/.auth_header" "$@" "$url" 2>/dev/null || true
     else
-      curl $opts "$@" "$url" 2>/dev/null || true
+      curl --silent --show-error --location -D "$headers_file" -o "$body_file" "$@" "$url" 2>/dev/null || true
     fi
   }
 
