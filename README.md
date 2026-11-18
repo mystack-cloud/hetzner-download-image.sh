@@ -1,5 +1,9 @@
 # hetzner-download-image.sh
 
+[![CI](https://github.com/mystack-cloud/hetzner-download-image.sh/actions/workflows/ci.yml/badge.svg)](https://github.com/mystack-cloud/hetzner-download-image.sh/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/release/mystack-cloud/hetzner-download-image.sh?sort=semver)](https://github.com/mystack-cloud/hetzner-download-image.sh/releases)
+[![License: MIT](https://img.shields.io/github/license/mystack-cloud/hetzner-download-image.sh)](LICENSE)
+
 **Download a container image as a plain rootfs tarball for Hetzner installimage.**
 
 Pure shell (curl + jq). Fetches from OCI/Docker registries and outputs a single `.tar[.gz]` with top-level `bin`, `etc`, `usr`, `root` — the format [Hetzner installimage](https://docs.hetzner.com/robot/dedicated-server/operating-systems/installimage/) expects. No Docker daemon required.
@@ -58,6 +62,7 @@ hetzner-download-image.sh --no-gzip -o ./images docker.io/library/alpine:3.19
 | `--no-gzip` | Write uncompressed `.tar` |
 | `-u USER[:PASSWORD]` | Registry credentials (required for private images) |
 | `-q`        | Quiet |
+| `-V`, `--version` | Show version |
 | `-h`, `--help` | Show help |
 
 The script writes a single rootfs tarball into the output directory. The file name is derived from the image (last repo path component), **host architecture**, and tag (e.g. `debian-13-amd64-latest.tar.gz` by default, or `debian-13-amd64-latest.tar` with `--no-gzip`). Point installimage’s config at this file (e.g. in `config.cfg`).
@@ -72,6 +77,23 @@ The script writes a single rootfs tarball into the output directory. The file na
 ## Architecture
 
 For multi-arch images (manifest lists), the script picks the manifest matching the **host** architecture (`uname -m` → OCI: amd64, arm64, arm, 386, ppc64le, s390x, riscv64). If no match is found, the first manifest in the list is used.
+
+## Development
+
+```bash
+make lint   # shellcheck
+make test   # bats tests (mock registry, no network)
+make check  # both
+```
+
+Requires [bats](https://github.com/bats-core/bats-core), [shellcheck](https://www.shellcheck.net/) and jq.
+
+## Releasing
+
+1. Bump `VERSION` in `hetzner-download-image.sh` and commit.
+2. `git tag vX.Y.Z && git push origin vX.Y.Z`
+
+The release workflow re-runs CI, checks the tag matches `VERSION`, and publishes a GitHub release with the scripts and `SHA256SUMS`.
 
 ## License
 

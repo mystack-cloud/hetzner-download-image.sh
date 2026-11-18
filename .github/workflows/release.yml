@@ -1,0 +1,36 @@
+name: Release
+
+# Push a tag like v1.2.3 to publish a release.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches script version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver=$(sed -n 's/^VERSION="\(.*\)"/\1/p' hetzner-download-image.sh | head -1)
+          if [ "$tag" != "$ver" ]; then
+            echo "Tag ($tag) does not match VERSION in script ($ver)" >&2
+            exit 1
+          fi
+      - name: Build checksums
+        run: sha256sum hetzner-download-image.sh get.hetzner-download-image.sh > SHA256SUMS
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            hetzner-download-image.sh get.hetzner-download-image.sh SHA256SUMS \
+            --title "$GITHUB_REF_NAME" --generate-notes

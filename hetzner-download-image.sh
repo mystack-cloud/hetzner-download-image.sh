@@ -11,19 +11,24 @@
 #   --no-gzip           Write uncompressed .tar
 #   -u, --user USER[:PASSWORD]   Registry credentials (required for private images)
 #   -q, --quiet         Less output
+#   -V, --version       Show version
 #   -h, --help          Show help
 
 set -e
 
 ME="${0##*/}"
+VERSION="0.1.0"
 
 # --- Dependencies ---
-for cmd in curl jq tar; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "$ME: required command not found: $cmd" >&2
-    exit 1
-  fi
-done
+check_deps() {
+  local cmd
+  for cmd in curl jq tar; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      echo "$ME: required command not found: $cmd" >&2
+      exit 1
+    fi
+  done
+}
 
 # --- Defaults and state ---
 REGISTRY=""
@@ -42,7 +47,7 @@ WORKDIR=""
 
 # --- Help ---
 show_help() {
-  sed -n '2,18p' "$0" | sed 's/^# \?//'
+  sed -n '2,19p' "$0" | sed 's/^# \?//'
   echo "Examples:"
   echo "  $ME ghcr.io/myorg/hetzner-images/debian-13:latest"
   echo "  $ME -o /root/local_images -u user:token ghcr.io/myorg/debian-13:latest"
@@ -304,61 +309,73 @@ cmd_download() {
 }
 
 # --- Main ---
-COMMAND=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -u|--user)
-      REG_USER="${2:-}"
-      REG_PASS="${REG_USER#*:}"
-      [ "$REG_PASS" = "$REG_USER" ] && REG_PASS=""
-      REG_USER="${REG_USER%%:*}"
-      shift 2
-      ;;
-    -q|--quiet)
-      QUIET=1
-      shift
-      ;;
-    -h|--help)
-      show_help
-      ;;
-    -o|--output)
-      OUTPUT_DIR="$2"
-      case "$OUTPUT_DIR" in
-        *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;;
-      esac
-      shift 2
-      ;;
-    --no-gzip)
-      DO_GZIP=0
-      shift
-      ;;
-    -*)
-      log_err "unknown option: $1"
-      exit 1
-      ;;
-    *)
-      if [ -z "$IMAGE_REF" ]; then
-        parse_image "$1"
+main() {
+  check_deps
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -u|--user)
+        REG_USER="${2:-}"
+        REG_PASS="${REG_USER#*:}"
+        [ "$REG_PASS" = "$REG_USER" ] && REG_PASS=""
+        REG_USER="${REG_USER%%:*}"
+        shift 2
+        ;;
+      -q|--quiet)
+        QUIET=1
         shift
-        if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
-          OUTPUT_DIR="$1"
-          case "$OUTPUT_DIR" in *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;; esac
+        ;;
+      -h|--help)
+        show_help
+        ;;
+      -V|--version)
+        echo "$ME $VERSION"
+        exit 0
+        ;;
+      -o|--output)
+        OUTPUT_DIR="$2"
+        case "$OUTPUT_DIR" in
+          *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;;
+        esac
+        shift 2
+        ;;
+      --no-gzip)
+        DO_GZIP=0
+        shift
+        ;;
+      -*)
+        log_err "unknown option: $1"
+        exit 1
+        ;;
+      *)
+        if [ -z "$IMAGE_REF" ]; then
+          parse_image "$1"
+          shift
+          if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+            OUTPUT_DIR="$1"
+            case "$OUTPUT_DIR" in *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;; esac
+            shift
+          fi
+        else
+          if [ "${1#-}" = "$1" ]; then
+            OUTPUT_DIR="$1"
+            case "$OUTPUT_DIR" in *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;; esac
+          fi
           shift
         fi
-      else
-        if [ "${1#-}" = "$1" ]; then
-          OUTPUT_DIR="$1"
-          case "$OUTPUT_DIR" in *.tar|*.tar.gz|*.tgz) log_err "output must be a directory, not a file path"; exit 1 ;; esac
-        fi
-        shift
-      fi
-      ;;
-  esac
-done
+        ;;
+    esac
+  done
 
-[ -n "$IMAGE_REF" ] || { log_err "usage: $ME [OPTIONS] IMAGE [OUTPUT_DIR]"; exit 1; }
-# Output is always <dir>/<name>-<arch>-<tag>.tar or .tar.gz
-OUTPUT_FILE="${OUTPUT_DIR:-.}"
-OUTPUT_FILE="${OUTPUT_FILE%/}/$(default_output)"
+  [ -n "$IMAGE_REF" ] || { log_err "usage: $ME [OPTIONS] IMAGE [OUTPUT_DIR]"; exit 1; }
+  # Output is always <dir>/<name>-<arch>-<tag>.tar or .tar.gz
+  OUTPUT_FILE="${OUTPUT_DIR:-.}"
+  OUTPUT_FILE="${OUTPUT_FILE%/}/$(default_output)"
 
-cmd_download
+  cmd_download
+}
+
+# Allow tests to source the functions without running main:
+#   HETZNER_DOWNLOAD_IMAGE_SOURCE_ONLY=1 . ./hetzner-download-image.sh
+if [ "${HETZNER_DOWNLOAD_IMAGE_SOURCE_ONLY:-0}" != 1 ]; then
+  main "$@"
+fi
